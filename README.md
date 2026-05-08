@@ -11,7 +11,7 @@ A declarative container stack manager that generates and manages Docker Compose 
 ## Setup
 
 ```bash
-git clone <https://github.com/ahlbertng/swiftdeploy>
+git clone https://github.com/ahlbertng/swiftdeploy
 cd swiftdeploy
 chmod +x swiftdeploy
 ```
