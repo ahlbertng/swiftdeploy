@@ -38,7 +38,7 @@ services:
       - {{ opa.policies_dir }}:/policies:ro
     networks:
       - {{ network.name }}
-    expose:
+    ports:
       - "8182:8181"
     restart: {{ services.restart_policy }}
 

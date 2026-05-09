@@ -1,17 +1,17 @@
 package swiftdeploy.canary
 
-import future.keywords if
-import future.keywords.contain
+import future.keywords.if
+import future.keywords.contains
 
-default allow :=false
+default allow := false
 
-allow if{
+allow if {
     not deny_error_rate
     not deny_latency
 }
 
 deny_error_rate if {
-    input.error_rate_ptc > data.thresholds.max_error_rate_pct
+    input.error_rate_pct > data.thresholds.max_error_rate_pct
 }
 
 deny_latency if {
@@ -20,16 +20,16 @@ deny_latency if {
 
 violations contains msg if {
     deny_error_rate
-    msg :=sprintf("error rate %.2f%% exceeds maximum %f%%", [input.error_rate_ptc, data.thresholds.max_error_rate_pct])
+    msg := sprintf("Error rate %.2f%% exceeds maximum %.2f%%", [input.error_rate_pct, data.thresholds.max_error_rate_pct])
 }
 
 violations contains msg if {
     deny_latency
-    msg := sprintf("p99 latency %.0fms exceeds maximum %.0fms", [input.p99_latency_ms, data.thresholds.max_p99_latency_ms])
+    msg := sprintf("P99 latency %.0fms exceeds maximum %.0fms", [input.p99_latency_ms, data.thresholds.max_p99_latency_ms])
 }
 
-decision :={
+decision := {
     "allow": allow,
     "violations": violations,
-    "checked_at: input.timestamp
+    "checked_at": input.timestamp,
 }

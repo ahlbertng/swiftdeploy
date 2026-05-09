@@ -11,8 +11,8 @@ allow if {
     not deny_cpu
 }
 
-deny_disk{
-    input.disk_free_gb < data.thresholds.min_disk_free_gb
+deny_disk if {
+    input.disk_free_gb > data.thresholds.min_disk_free_gb
 }
 
 deny_cpu if {
@@ -21,7 +21,7 @@ deny_cpu if {
 
 violations contains msg if {
     deny_disk
-    msg := sprintf("Disk free %.1fGB is below minimum %.1fGB",[input.disk_free_gb, data.threshold.min_disk_free_gb])
+    msg := sprintf("Disk free %.1fGB is below minimum %.1fGB",[input.disk_free_gb, data.thresholds.min_disk_free_gb])
 }
 
 violations contain msg if {
