@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""swiftdeploy — declarative container stack manager."""
 
+import json
 import os
 import sys
 import time
@@ -8,6 +8,7 @@ import socket
 import subprocess
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 
 try:
     import yaml
@@ -21,21 +22,24 @@ except ImportError:
     print("[ERROR] Jinja2 not installed. Run: pip install pyyaml jinja2", file=sys.stderr)
     sys.exit(1)
 
-# ── Paths 
+# Paths 
 ROOT       = os.path.dirname(os.path.abspath(__file__))
 MANIFEST   = os.path.join(ROOT, "manifest.yaml")
 TMPL_DIR   = os.path.join(ROOT, "templates")
 GEN_DIR    = os.path.join(ROOT)
 NGINX_CONF = os.path.join(GEN_DIR, "nginx.conf")
 COMPOSE    = os.path.join(GEN_DIR, "docker-compose.yml")
+HISTORY     = os.path.join(ROOT, "history.json1")
+AUDIT_REPORT = os.path.join(ROOT, "audit.md")
 
 REQUIRED_FIELDS = {
     "services": ["image", "port"],
     "nginx":    ["image", "port"],
     "network":  ["name", "driver_type"],
+    "opa":      ["policies_dir", "host", "port"],
 }
 
-# ── Colours 
+# Colours 
 GREEN  = "\033[32m"
 RED    = "\033[31m"
 YELLOW = "\033[33m"
@@ -48,8 +52,9 @@ def fail(msg):  print(f"  {RED}✘{RESET}  {msg}")
 def info(msg):  print(f"  {CYAN}→{RESET}  {msg}")
 def warn(msg):  print(f"  {YELLOW}!{RESET}  {msg}")
 def header(msg): print(f"\n{BOLD}{msg}{RESET}")
+def block(msg):  print(f"\n{RED}{BOLD} Policy Violation BLOCKED {RESET}\n{msg}")
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# Helpers
 def load_manifest():
     with open(MANIFEST) as f:
         return yaml.safe_load(f)
@@ -78,7 +83,6 @@ def run(cmd, capture=False, check=True):
         return subprocess.run(cmd, shell=True, check=check)
 
 def compose_cmd():
-    """Return the correct docker compose invocation."""
     out, _ = run("docker compose version", capture=True, check=False)
     if out:
         return f"docker compose -f {COMPOSE}"
@@ -113,7 +117,194 @@ def healthz_check(port, timeout=60):
         time.sleep(2)
     return False
 
-# ── Subcommands 
+def append_history(record: dict):
+    record["timestamp"] = datetime.now(timezone.utc).isoformat()
+    with open(HISTORY, "a") as f:
+        
+# OPA
+
+    def opa_url(manifest):
+    host = manifest["opa"]["host"]
+    port = manifest["opa"]["port"]
+    return f"http://{host}:{port}"
+
+def query_opa(manifest, package_path, input_data):
+   
+    url = f"{opa_url(manifest)}/v1/data/{package_path}/decision"
+    payload = json.dumps({"input": input_data}).encode()
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read())
+            result = body.get("result", {})
+            allowed    = result.get("allow", False)
+            violations = list(result.get("violations", []))
+            return allowed, violations, None
+    except urllib.error.URLError as e:
+        return False, [], f"OPA unreachable: {e.reason}"
+    except urllib.error.HTTPError as e:
+        return False, [], f"OPA HTTP {e.code}: {e.reason}"
+    except json.JSONDecodeError:
+        return False, [], "OPA returned non-JSON response"
+    except Exception as e:
+        return False, [], f"Unexpected OPA error: {e}"
+
+def get_host_stats():
+    """Collect disk free (GB) and CPU load for OPA input."""
+    disk  = psutil.disk_usage("/")
+    load  = os.getloadavg()[0]   # 1-minute load average
+    return {
+        "disk_free_gb": round(disk.free / (1024 ** 3), 2),
+        "cpu_load":     round(load, 4),
+        "timestamp":    datetime.now(timezone.utc).isoformat(),
+    }
+
+def scrape_metrics(app_port):
+    """
+    Scrape /metrics from the app and parse Prometheus text format.
+    Returns dict of {metric_name: float} for key metrics.
+    """
+    url = f"http://localhost:{app_port}/metrics"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            text = resp.read().decode("utf-8")
+    except Exception as e:
+        return None, str(e)
+
+    metrics = {}
+    for line in text.splitlines():
+        if line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            name_labels = parts[0]
+            value = parts[-1]
+            try:
+                metrics[name_labels] = float(value)
+            except ValueError:
+                pass
+    return metrics, None
+
+def calc_error_rate_and_p99(metrics: dict):
+    """
+    From raw Prometheus metrics dict, compute:
+    - error_rate_pct: % of requests that returned 5xx
+    - p99_latency_ms: estimated P99 from histogram buckets
+    """
+    total_reqs = 0.0
+    error_reqs = 0.0
+    for key, val in metrics.items():
+        if key.startswith("http_requests_total{"):
+            total_reqs += val
+            if 'status_code="5' in key:
+                error_reqs += val
+
+    error_rate_pct = (error_reqs / total_reqs * 100.0) if total_reqs > 0 else 0.0
+
+    # P99 from histogram: find bucket where cumulative count >= 99% of total
+    
+    buckets = {}
+    hist_count = 0.0
+    for key, val in metrics.items():
+        if key.startswith("http_request_duration_seconds_bucket{"):
+            # extract le value
+            try:
+                le = float(key.split('le="')[1].rstrip('"}'))
+                buckets[le] = val
+            except (IndexError, ValueError):
+                pass
+        if key.startswith("http_request_duration_seconds_count"):
+            hist_count = val
+
+    p99_latency_ms = 0.0
+    if buckets and hist_count > 0:
+        target = hist_count * 0.99
+        for le in sorted(buckets.keys()):
+            if buckets[le] >= target:
+                p99_latency_ms = le * 1000.0
+                break
+
+    return round(error_rate_pct, 4), round(p99_latency_ms, 2)
+
+# Pre-flight OPA gates 
+def gate_pre_deploy(manifest):
+    """Query infra policy before deploy. Exit if blocked."""
+    header("Policy Check: Pre-Deploy (Infrastructure)")
+    stats = get_host_stats()
+    info(f"Disk free: {stats['disk_free_gb']}GB  |  CPU load: {stats['cpu_load']}")
+
+    allowed, violations, error = query_opa(manifest, "swiftdeploy/infra", stats)
+
+    if error:
+        # OPA unavailable distinct failure mode, warn but don't crash
+        
+        warn(f"OPA unavailable ({error}) — skipping policy gate")
+        append_history({"event": "opa_unavailable", "gate": "pre_deploy", "reason": error})
+        return
+
+    append_history({
+        "event":      "policy_check",
+        "gate":       "pre_deploy",
+        "allowed":    allowed,
+        "violations": violations,
+        "input":      stats,
+    })
+
+    if not allowed:
+        for v in violations:
+            fail(v)
+        block("\n".join(violations))
+        sys.exit(1)
+
+    ok("Infrastructure policy passed")
+
+def gate_pre_promote(manifest, nginx_port, app_port):
+    """Scrape /metrics and query canary policy before promote. Exit if blocked."""
+    header("Policy Check: Pre-Promote (Canary Safety)")
+
+    metrics, err = scrape_metrics(nginx_port)
+    if err or metrics is None:
+        warn(f"Could not scrape /metrics ({err}) — skipping policy gate")
+        append_history({"event": "metrics_scrape_failed", "gate": "pre_promote", "reason": err})
+        return
+
+    error_rate_pct, p99_latency_ms = calc_error_rate_and_p99(metrics)
+    info(f"Error rate: {error_rate_pct:.2f}%  |  P99 latency: {p99_latency_ms:.0f}ms")
+
+    input_data = {
+        "error_rate_pct":  error_rate_pct,
+        "p99_latency_ms":  p99_latency_ms,
+        "timestamp":       datetime.now(timezone.utc).isoformat(),
+    }
+
+    allowed, violations, error = query_opa(manifest, "swiftdeploy/canary", input_data)
+
+    if error:
+        warn(f"OPA unavailable ({error}) — skipping policy gate")
+        append_history({"event": "opa_unavailable", "gate": "pre_promote", "reason": error})
+        return
+
+    append_history({
+        "event":      "policy_check",
+        "gate":       "pre_promote",
+        "allowed":    allowed,
+        "violations": violations,
+        "input":      input_data,
+    })
+
+    if not allowed:
+        for v in violations:
+            fail(v)
+        block("\n".join(violations))
+        sys.exit(1)
+
+    ok("Canary safety policy passed")
+
+# Subcommands 
 
 def cmd_init():
     header("swiftdeploy init")
@@ -121,12 +312,25 @@ def cmd_init():
     render_templates(manifest)
     ok("Init complete — configs generated in generated/")
 
+# Ensure policies/ dir and opa-config.yaml exist
+
+    policies_dir = os.path.join(ROOT, "policies")
+    os.makedirs(policies_dir, exist_ok=True)
+    opa_cfg = os.path.join(policies_dir, "opa-config.yaml")
+    if not os.path.isfile(opa_cfg):
+        with open(opa_cfg, "w") as f:
+            f.write("decision_logs:\n  console: true\n")
+        info("Created policies/opa-config.yaml")
+
+    render_templates(manifest)
+    ok("Init complete — configs generated")
+
 def cmd_validate():
     header("swiftdeploy validate")
     passed = 0
     failed = 0
 
-    # 1 — manifest exists and is valid YAML
+    # manifest exists and is valid YAML
     label = "manifest.yaml exists and is valid YAML"
     if not os.path.isfile(MANIFEST):
         fail(f"{label}")
@@ -142,7 +346,7 @@ def cmd_validate():
             failed += 1
             manifest = None
 
-    # 2 — required fields present and non-empty
+    # required fields present and non-empty
     label = "All required fields present and non-empty"
     if manifest is None:
         fail(f"{label}  (skipped — manifest invalid)")
@@ -164,7 +368,7 @@ def cmd_validate():
             ok(label)
             passed += 1
 
-    # 3 — Docker image exists locally
+    # Docker image exists locally
     label = "Docker image exists locally"
     if manifest:
         image = manifest["services"]["image"]
@@ -179,7 +383,7 @@ def cmd_validate():
         fail(f"{label}  (skipped)")
         failed += 1
 
-    # 4 — Nginx port not already bound
+    # Nginx port not already bound
     label = "Nginx port not already bound on host"
     if manifest:
         nginx_port = int(manifest["nginx"]["port"])
@@ -197,7 +401,7 @@ def cmd_validate():
         fail(f"{label}  (skipped)")
         failed += 1
 
-    # 5 — generated nginx.conf is syntactically valid
+    # generated nginx.conf is syntactically valid
     label = "Generated nginx.conf is syntactically valid"
     if not os.path.isfile(NGINX_CONF):
         fail(f"{label}  (nginx.conf not found — run init first)")

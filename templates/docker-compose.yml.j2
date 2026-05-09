@@ -25,6 +25,23 @@ services:
       retries: 6
       start_period: 10s
 
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: swiftdeploy-opa
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--config-file=/policies/opa-config.yaml"
+      - "/policies"
+    volumes:
+      - {{ opa.policies_dir }}:/policies:ro
+    networks:
+      - {{ network.name }}
+    expose:
+      - "8182:8181"
+    restart: {{ services.restart_policy }}
+
   nginx:
     image: {{ nginx.image }}
     container_name: swiftdeploy-nginx

@@ -10,6 +10,11 @@ nginx:
   port: 5050
   proxy_timeout: 30
 
+opa:
+  policies_dir: ./policies
+  host: localhost
+  port: 8182        # host-side port the CLI uses to reach OPA
+
 network:
   name: swiftdeploy-net
   driver_type: bridge
