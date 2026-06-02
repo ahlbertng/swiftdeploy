@@ -57,6 +57,6 @@ Stops and removes all containers, networks and volumes.
 
 ## Endpoints
 
-- `GET /` — Welcome message with current mode and version
-- `GET /healthz` — Health check with uptime and mode
-- `POST /chaos` — Inject chaos (canary mode only)
+- `GET /` Welcome message with current mode and version
+- `GET /healthz` Health check with uptime and mode
+- `POST /chaos` Inject chaos (canary mode only)
