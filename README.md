@@ -2,7 +2,7 @@
 
 A declarative deployment CLI. You describe your deployment in `manifest.yaml`, and SwiftDeploy generates the config, deploys it, checks it against policy, observes it, and records everything it does.
 
-It is more than a Docker wrapper: it combines **config generation**, **policy enforcement (OPA)**, **live observability**, and an **audit trail** in one Python CLI.
+it combines **config generation**, **policy enforcement (OPA)**, **live observability**, and an **audit trail** in one Python CLI.
 
 ## Architecture
 
