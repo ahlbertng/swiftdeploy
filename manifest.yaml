@@ -1,5 +1,5 @@
 services:
-  image:  ahlbert-swiftdeploy:latest
+  image:  swiftdeploy:latest
   port: 9090
   mode: canary
   version: "1.0.0"
