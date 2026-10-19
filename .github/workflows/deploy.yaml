@@ -71,23 +71,31 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 10. Setup Docker and run Docker Compose stack
-      - name: Start Docker Compose Stack
+      - name: Set up Python for SwiftDeploy CLI
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install SwiftDeploy CLI dependencies
         run: |
-          docker compose up -d --build
-          echo "Waiting for application and Nginx gateway to initialize..."
-          sleep 10
+          python -m pip install --upgrade pip
+          pip install pyyaml jinja2 psutil
+
+      # 10. Setup Docker and run Docker Compose stack
+      - name: Build and Deploy Docker Compose Stack
+        run: |
+          docker build -t swiftdeploy:latest .
+          ./swiftdeploy deploy
 
       # 11. Integration Test: Check Health Status Endpoint
       - name: Verify Live Application Healthz
         run: |
-          curl --fail http://localhost/healthz || (docker compose logs && exit 1)
+          curl --fail http://localhost:5050/healthz || (docker compose logs && exit 1)
 
-      # 12. Run Deployment Simulator Engine & Verify Metrics Gate
-      - name: Run SwiftDeploy CLI Compilation and Metrics Evaluation
+      # 12. Generate the deployment audit report
+      - name: Generate Deployment Audit Report
         run: |
-          # Executes your engine to verify rendering, canary checks, and asset generation
-          python -m swiftdeploy.cli --manifest manifest.yaml
+          ./swiftdeploy audit
           
       # 13. Confirm Artifact Generation
       - name: Verify Audit Reports and Artifacts
@@ -108,4 +116,8 @@ jobs:
       - name: Stop Docker Compose Stack
         if: always()
         run: |
-          docker compose down --volumes
+          if [ -f docker-compose.yml ]; then
+            docker compose down --volumes
+          else
+            echo "No generated Compose configuration; nothing to stop."
+          fi
