@@ -8,7 +8,7 @@ on:
 
 jobs:
   validate-and-test:
-    runs-on: Ubuntu-latest
+    runs-on: Ubuntu-24.04
     
     steps:
       # 1. Checkout the codebase
@@ -65,7 +65,7 @@ jobs:
 
   integration-and-canary:
     needs: validate-and-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     
     steps:
       - name: Checkout Repository
