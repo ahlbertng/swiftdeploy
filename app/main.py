@@ -103,14 +103,17 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
 
 
 # Routes
-# Note: chaos endpoint is POST /chaos with JSON body {"mode": "slow|error|recover", "duration": 5, "rate": 0.5}
+# Note: chaos endpoint is POST /chaos with JSON body {"mode":
+# "slow|error|recover", "duration": 5, "rate": 0.5}
 @app.get("/")
 async def root():
     return {
-        "message": f"Welcome to SwiftDeploy Service — running in {MODE.upper()} mode",
+        "message": f"Welcome to SwiftDeploy Service — running in {
+            MODE.upper()} mode",
         "mode": MODE,
         "version": APP_VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(
+            timezone.utc).isoformat(),
     }
 
 
@@ -128,7 +131,9 @@ async def healthz():
 async def metrics():
     app_uptime_seconds.set(time.time() - START_TIME)
     data = generate_latest(REGISTRY)
-    return PlainTextResponse(data.decode("utf-8"), media_type=CONTENT_TYPE_LATEST)
+    return PlainTextResponse(
+        data.decode("utf-8"),
+        media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/chaos")
@@ -152,7 +157,7 @@ async def chaos(request: Request):
         rate = float(body.get("rate", 0.5))
         chaos_state["mode"] = "error"
         chaos_state["rate"] = rate
-        return {"message": f"chaos activated: error rate {rate*100:.0f}%"}
+        return {"message": f"chaos activated: error rate {rate * 100:.0f}%"}
 
     elif chaos_mode == "recover":
         chaos_state.clear()
@@ -160,9 +165,8 @@ async def chaos(request: Request):
         return {"message": "chaos cancelled — service recovered"}
 
     return JSONResponse(
-        status_code=400,
-        content={"error": f"unknown chaos mode: {chaos_mode}. Use slow, error, or recover"}
-    )
+        status_code=400, content={
+            "error": f"unknown chaos mode: {chaos_mode}. Use slow, error, or recover"})
 
 
 if __name__ == "__main__":
