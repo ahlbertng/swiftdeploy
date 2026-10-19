@@ -34,7 +34,7 @@ http_request_duration_seconds = Histogram(
 )
 
 app_uptime_seconds = Gauge("app_uptime_seconds", "Seconds since app start")
-app_mode_gauge     = Gauge("app_mode", "0=stable 1=canary")
+app_mode_gauge = Gauge("app_mode", "0=stable 1=canary")
 chaos_active_gauge = Gauge("chaos_active", "0=none 1=slow 2=error")
 
 # Chaos state
@@ -42,13 +42,14 @@ chaos_state: dict = {"mode": None}
 
 app = FastAPI(title="SwiftDeploy Service")
 
+
 # Middleware for metrics and chaos injection
 @app.middleware("http")
 async def metrics_and_chaos_middleware(request: Request, call_next):
     # Update gauges
     app_uptime_seconds.set(time.time() - START_TIME)
     app_mode_gauge.set(1 if MODE == "canary" else 0)
-    
+
     chaos_mode = chaos_state.get("mode")
     if chaos_mode == "slow":
         chaos_active_gauge.set(1)
@@ -89,7 +90,7 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
         path=path,
         status_code=str(response.status_code)
     ).inc()
-    
+
     http_request_duration_seconds.labels(
         method=request.method,
         path=path
@@ -97,11 +98,12 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
 
     if MODE == "canary":
         response.headers["X-Mode"] = "canary"
-        
+
     return response
 
+
 # Routes
-# Note: chaos endpoint is POST /chaos with JSON body {"mode": "slow|error|recover", "duration": 5, "rate": 0.5} 
+# Note: chaos endpoint is POST /chaos with JSON body {"mode": "slow|error|recover", "duration": 5, "rate": 0.5}
 @app.get("/")
 async def root():
     return {
@@ -110,6 +112,7 @@ async def root():
         "version": APP_VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
 
 @app.get("/healthz")
 async def healthz():
@@ -120,11 +123,13 @@ async def healthz():
         "version": APP_VERSION,
     }
 
+
 @app.get("/metrics")
 async def metrics():
     app_uptime_seconds.set(time.time() - START_TIME)
     data = generate_latest(REGISTRY)
     return PlainTextResponse(data.decode("utf-8"), media_type=CONTENT_TYPE_LATEST)
+
 
 @app.post("/chaos")
 async def chaos(request: Request):
@@ -138,9 +143,9 @@ async def chaos(request: Request):
 
     if chaos_mode == "slow":
         duration = int(body.get("duration", 5))
-        chaos_state["mode"]     = "slow"
+        chaos_state["mode"] = "slow"
         chaos_state["duration"] = duration
-        chaos_state["until"]    = time.time() + 300
+        chaos_state["until"] = time.time() + 300
         return {"message": f"chaos activated: slow mode for {duration}s per request"}
 
     elif chaos_mode == "error":
@@ -159,7 +164,7 @@ async def chaos(request: Request):
         content={"error": f"unknown chaos mode: {chaos_mode}. Use slow, error, or recover"}
     )
 
+
 if __name__ == "__main__":
     import uvicorn
-    # If using reload=False, pass the app object directly to uvicorn.run
     uvicorn.run(app, host="0.0.0.0", port=APP_PORT)
