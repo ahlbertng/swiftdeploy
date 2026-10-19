@@ -108,8 +108,7 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
 @app.get("/")
 async def root():
     return {
-        "message": f"Welcome to SwiftDeploy Service — running in {
-            MODE.upper()} mode",
+        "message": f"Welcome to SwiftDeploy Service — running in {MODE.upper()} mode",
         "mode": MODE,
         "version": APP_VERSION,
         "timestamp": datetime.now(
