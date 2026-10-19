@@ -8,7 +8,7 @@ on:
 
 jobs:
   validate-and-test:
-    runs-on: Ubuntu 26.04.1 LTSt
+    runs-on: Ubuntu 26.04.1
     
     steps:
       # 1. Checkout the codebase
