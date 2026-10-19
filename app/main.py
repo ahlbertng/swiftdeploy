@@ -13,41 +13,42 @@ from prometheus_client import (
 )
 
 # Env
-MODE        = os.getenv("MODE", "stable").lower()
+MODE = os.getenv("MODE", "stable").lower()
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
-APP_PORT    = int(os.getenv("APP_PORT", "3000"))
-START_TIME  = time.time()
+APP_PORT = int(os.getenv("APP_PORT", "3000"))
+START_TIME = time.time()
+
 
 # Prometheus metrics
-
 http_requests_total = Counter(
     "http_requests_total",
     "Total HTTP requests",
     ["method", "path", "status_code"]
 )
+
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds",
     "HTTP request latency",
     ["method", "path"],
     buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 )
+
 app_uptime_seconds = Gauge("app_uptime_seconds", "Seconds since app start")
 app_mode_gauge     = Gauge("app_mode", "0=stable 1=canary")
 chaos_active_gauge = Gauge("chaos_active", "0=none 1=slow 2=error")
 
 # Chaos state
-
 chaos_state: dict = {"mode": None}
 
 app = FastAPI(title="SwiftDeploy Service")
 
 # Middleware for metrics and chaos injection
-
 @app.middleware("http")
 async def metrics_and_chaos_middleware(request: Request, call_next):
     # Update gauges
     app_uptime_seconds.set(time.time() - START_TIME)
     app_mode_gauge.set(1 if MODE == "canary" else 0)
+    
     chaos_mode = chaos_state.get("mode")
     if chaos_mode == "slow":
         chaos_active_gauge.set(1)
@@ -57,7 +58,6 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
         chaos_active_gauge.set(0)
 
     # Chaos: error injection (canary only)
-
     if MODE == "canary" and chaos_mode == "error":
         rate = chaos_state.get("rate", 0.0)
         if random.random() < rate:
@@ -74,13 +74,11 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
             return resp
 
     # Chaos: slow injection (canary only)
-
     if MODE == "canary" and chaos_mode == "slow":
         if time.time() < chaos_state.get("until", 0):
             await asyncio.sleep(chaos_state.get("duration", 0))
 
     # Time the real request
-
     start = time.time()
     response = await call_next(request)
     elapsed = time.time() - start
@@ -91,6 +89,7 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
         path=path,
         status_code=str(response.status_code)
     ).inc()
+    
     http_request_duration_seconds.labels(
         method=request.method,
         path=path
@@ -98,6 +97,7 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
 
     if MODE == "canary":
         response.headers["X-Mode"] = "canary"
+        
     return response
 
 # Routes
@@ -161,4 +161,5 @@ async def chaos(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=APP_PORT, reload=False)
+    # If using reload=False, pass the app object directly to uvicorn.run
+    uvicorn.run(app, host="0.0.0.0", port=APP_PORT)
