@@ -36,23 +36,29 @@ jobs:
           # exit-zero treats all errors as warnings.
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      # 5. Run Python CLI Unit Tests
+      # 5. Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 6. Run Python CLI Unit Tests
       - name: Run Unit Tests
         run: |
           pytest tests/
 
-      # 6. Install Open Policy Agent (OPA) CLI
+      # 7. Install Open Policy Agent (OPA) CLI
       - name: Setup OPA CLI
         uses: open-policy-agent/setup-opa@v2
         with:
           version: latest
 
-      # 7. Pre-compile & Validate Rego Policy Syntax
+      # 8. Pre-compile & Validate Rego Policy Syntax
       - name: Validate OPA Policies Syntax
         run: |
           opa check policies/
 
-      # 8. Run local OPA policy unit tests
+      # 9. Run local OPA policy unit tests
       - name: Run OPA Policy Tests
         run: |
           opa test policies/
@@ -65,31 +71,31 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 9. Setup Docker and run Docker Compose stack
+      # 10. Setup Docker and run Docker Compose stack
       - name: Start Docker Compose Stack
         run: |
           docker compose up -d --build
           echo "Waiting for application and Nginx gateway to initialize..."
           sleep 10
 
-      # 10. Integration Test: Check Health Status Endpoint
+      # 11. Integration Test: Check Health Status Endpoint
       - name: Verify Live Application Healthz
         run: |
           curl --fail http://localhost/healthz || (docker compose logs && exit 1)
 
-      # 11. Run Deployment Simulator Engine & Verify Metrics Gate
+      # 12. Run Deployment Simulator Engine & Verify Metrics Gate
       - name: Run SwiftDeploy CLI Compilation and Metrics Evaluation
         run: |
           # Executes your engine to verify rendering, canary checks, and asset generation
           python -m swiftdeploy.cli --manifest manifest.yaml
           
-      # 12. Confirm Artifact Generation
+      # 13. Confirm Artifact Generation
       - name: Verify Audit Reports and Artifacts
         run: |
           if [ ! -f history.jsonl ]; then echo "Error: history.jsonl missing!" && exit 1; fi
           if [ ! -f audit_report.md ]; then echo "Error: audit_report.md missing!" && exit 1; fi
 
-      # 13. Archive the Deployment Audit Report
+      # 14. Archive the Deployment Audit Report
       - name: Upload Deployment Audit Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -98,7 +104,7 @@ jobs:
             history.jsonl
             audit_report.md
 
-      # 14. Tear down infrastructure safely
+      # 15. Tear down infrastructure safely
       - name: Stop Docker Compose Stack
         if: always()
         run: |
