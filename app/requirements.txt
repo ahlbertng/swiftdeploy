@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 prometheus-client
 psutil
+pytest
+httpx
