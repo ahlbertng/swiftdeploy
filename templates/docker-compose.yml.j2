@@ -6,6 +6,7 @@ services:
       MODE: "{{ services.mode }}"
       APP_VERSION: "{{ services.version }}"
       APP_PORT: "{{ services.port }}"
+      CHAOS_TOKEN: "${CHAOS_TOKEN:-}"
     networks:
       - {{ network.name }}
     volumes:

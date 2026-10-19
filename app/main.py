@@ -2,6 +2,7 @@ import os
 import time
 import random
 import asyncio
+import hmac
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
@@ -16,6 +17,7 @@ from prometheus_client import (
 MODE = os.getenv("MODE", "stable").lower()
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "3000"))
+CHAOS_TOKEN = os.getenv("CHAOS_TOKEN", "")
 START_TIME = time.time()
 
 
@@ -58,8 +60,10 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
     else:
         chaos_active_gauge.set(0)
 
+    is_chaos_control_request = request.url.path == "/chaos"
+
     # Chaos: error injection (canary only)
-    if MODE == "canary" and chaos_mode == "error" and request.url.path != "/chaos":
+    if MODE == "canary" and chaos_mode == "error" and not is_chaos_control_request:
         rate = chaos_state.get("rate", 0.0)
         if random.random() < rate:
             http_requests_total.labels(
@@ -75,7 +79,7 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
             return resp
 
     # Chaos: slow injection (canary only)
-    if MODE == "canary" and chaos_mode == "slow":
+    if MODE == "canary" and chaos_mode == "slow" and not is_chaos_control_request:
         if time.time() < chaos_state.get("until", 0):
             await asyncio.sleep(chaos_state.get("duration", 0))
 
@@ -142,6 +146,21 @@ async def chaos(request: Request):
             status_code=403,
             content={"error": "chaos endpoint only available in canary mode"}
         )
+    if not CHAOS_TOKEN:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "chaos endpoint disabled: CHAOS_TOKEN is not configured"}
+        )
+    provided_token = request.headers.get("X-Chaos-Token", "")
+    if not hmac.compare_digest(
+        provided_token.encode("utf-8"),
+        CHAOS_TOKEN.encode("utf-8")
+    ):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "invalid or missing chaos token"}
+        )
+
     body = await request.json()
     chaos_mode = body.get("mode")
 

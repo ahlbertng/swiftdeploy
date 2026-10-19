@@ -216,6 +216,11 @@ Metrics tell you **what is happening**. Policy tells you **whether that is accep
 
 Chaos is part of the control plane, not just a README claim. The app exposes its chaos state as a metric, and `status` maps it:
 
+The `POST /chaos` control endpoint is available only in canary mode and requires
+the `X-Chaos-Token` request header. Set `CHAOS_TOKEN` in the environment before
+generating or starting the Compose stack; if it is unset, the endpoint is
+disabled. Keep this token private and do not commit it.
+
 ```python
 chaos_val = int(metrics.get("chaos_active", 0))
 ```
