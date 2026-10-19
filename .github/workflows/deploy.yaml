@@ -8,7 +8,7 @@ on:
 
 jobs:
   validate-and-test:
-    runs-on: Ubuntu 26.04.1
+    runs-on: Ubuntu-latest
     
     steps:
       # 1. Checkout the codebase
@@ -59,7 +59,7 @@ jobs:
 
   integration-and-canary:
     needs: validate-and-test
-    runs-on: ubuntu 26.04.1
+    runs-on: ubuntu-latest
     
     steps:
       - name: Checkout Repository
