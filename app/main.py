@@ -59,7 +59,7 @@ async def metrics_and_chaos_middleware(request: Request, call_next):
         chaos_active_gauge.set(0)
 
     # Chaos: error injection (canary only)
-    if MODE == "canary" and chaos_mode == "error":
+    if MODE == "canary" and chaos_mode == "error" and request.url.path != "/chaos":
         rate = chaos_state.get("rate", 0.0)
         if random.random() < rate:
             http_requests_total.labels(
