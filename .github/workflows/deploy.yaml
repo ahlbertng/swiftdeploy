@@ -59,7 +59,7 @@ jobs:
 
   integration-and-canary:
     needs: validate-and-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu 26.04.1
     
     steps:
       - name: Checkout Repository
