@@ -12,11 +12,11 @@ allow if {
 }
 
 deny_disk if {
-    input.disk_free_gb > data.thresholds.min_disk_free_gb
+    input.disk_free_gb < data.thresholds.min_disk_free_gb
 }
 
 deny_cpu if {
-    input.cpu_load < data.thresholds.max_cpu_load
+    input.cpu_load > data.thresholds.max_cpu_load
 }
 
 violations contains msg if {
@@ -24,7 +24,7 @@ violations contains msg if {
     msg := sprintf("Disk free %.1fGB is below minimum %.1fGB",[input.disk_free_gb, data.thresholds.min_disk_free_gb])
 }
 
-violations contain msg if {
+violations contains msg if {
     deny_cpu
     msg := sprintf("CPU load %.2f exceeds maximum %.2f", [input.cpu_load, data.thresholds.max_cpu_load])
 }
