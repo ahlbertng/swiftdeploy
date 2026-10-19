@@ -6,7 +6,6 @@ it combines **config generation**, **policy enforcement (OPA)**, **live observab
 
 ## Architecture
 
-```
                      manifest.yaml
                           │
                           ▼
