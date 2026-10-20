@@ -6,7 +6,6 @@
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![OPA](https://img.shields.io/badge/Policy-OPA-7D9B00)
 
-[![Architecture diagram](/docs/diagram.png)](https://gitdiagram.com/ahlbertng/swiftdeploy?utm_source=readme&utm_medium=badge)
 
 SwiftDeploy is a deployment automation demo for a containerized FastAPI service. Describe the deployment in `manifest.yaml`; the Python CLI renders Docker Compose and Nginx configuration, deploys the stack, checks health and policy, and records events for an audit report.
 
