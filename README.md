@@ -1,10 +1,35 @@
 # SwiftDeploy
 
-A declarative deployment CLI. You describe your deployment in `manifest.yaml`, and SwiftDeploy generates the config, deploys it, checks it against policy, observes it, and records everything it does.
+[![CI](https://github.com/ahlbertng/swiftdeploy/actions/workflows/deploy.yaml/badge.svg)](https://github.com/ahlbertng/swiftdeploy/actions/workflows/deploy.yaml)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![OPA](https://img.shields.io/badge/Policy-OPA-7D9B00)
 
-it combines **config generation**, **policy enforcement (OPA)**, **live observability**, and an **audit trail** in one Python CLI.
+SwiftDeploy is a deployment automation demo for a containerized FastAPI service. Describe the deployment in `manifest.yaml`; the Python CLI renders Docker Compose and Nginx configuration, deploys the stack, checks health and policy, and records events for an audit report.
 
-## Architecture
+It brings together four parts of a deployment workflow:
+
+- **Configuration generation** from a manifest and Jinja templates
+- **Policy checks** with Open Policy Agent (OPA)
+- **Service and deployment observability** through FastAPI and Prometheus metrics
+- **Deployment history and audit reports** for reviewing what happened
+
+## 📦 What is in this repository?
+
+| Path | Purpose |
+| --- | --- |
+| [`swiftdeploy`](./swiftdeploy) | CLI for rendering configuration, deploying, checking status, and creating audit reports |
+| [`manifest.yaml`](./manifest.yaml) | Service, network, Nginx, and OPA settings |
+| [`templates/`](./templates) | Jinja templates for generated Compose and Nginx configuration |
+| [`app/`](./app) | FastAPI service, runtime dependencies, and test dependencies |
+| [`policies/`](./policies) | OPA infrastructure and canary policies with Rego tests |
+| [`tests/`](./tests) | Python endpoint and chaos-control tests |
+| [`.github/workflows/deploy.yaml`](./.github/workflows/deploy.yaml) | CI checks and container integration workflow |
+
+Generated `docker-compose.yml` and `nginx.conf` files are created from the manifest and templates; they are intentionally not committed.
+
+## 🏗️ Architecture
 
                      manifest.yaml
                           │
@@ -58,11 +83,11 @@ it combines **config generation**, **policy enforcement (OPA)**, **live observab
                     audit_report.md
 ```
 
-## Commands
+## 🧰 CLI commands
 
 | Command    | Responsibility                                      |
 |------------|-----------------------------------------------------|
-| `init`     | Generate deployment configuration                   |
+| `init`     | Generate Compose and Nginx configuration             |
 | `validate` | Preflight check of configuration and dependencies   |
 | `deploy`   | Policy-check, deploy, and health-check              |
 | `promote`  | Switch canary/stable mode and verify it             |
@@ -70,14 +95,16 @@ it combines **config generation**, **policy enforcement (OPA)**, **live observab
 | `audit`    | Turn event history into an audit report             |
 | `teardown` | Remove the deployment                               |
 
-## Four layers of validation
+Run `./swiftdeploy` without a command to see the supported command syntax.
+
+## ✅ Four layers of validation
 
 1. **Configuration validation** (`validate`): is the deployment configuration valid?
 2. **Runtime health** (`/healthz`): is the application alive and responding?
 3. **Policy validation** (OPA): does the current state satisfy the defined operational rules?
 4. **Observability** (`/metrics`, `status`, `history.jsonl`, `audit_report.md`): what is happening, and what happened?
 
-## Deployment lifecycle
+## 🔄 Deployment lifecycle
 
 ### `./swiftdeploy deploy`
 
@@ -129,7 +156,7 @@ allowed?
        stable
 ```
 
-### `./swiftdeploy status`
+### 📊 `./swiftdeploy status`
 
 ```
 metrics
@@ -159,9 +186,9 @@ summarize promotions
 audit_report.md
 ```
 
-## `status`: the operational dashboard
+## 📊 `status`: the operational dashboard
 
-`status` is a small deployment observability console. Every 5 seconds it scrapes `/metrics` and collects application, policy, and host information.
+`status` is a deployment observability console. Every 5 seconds it scrapes `/metrics` and collects application, policy, and host information.
 
 ```
         /metrics
@@ -192,7 +219,7 @@ traffic stats    app state
 
 **Policy evaluation**
 
-The dashboard doesn't only display numbers, it asks OPA whether they are acceptable:
+The dashboard displays service metrics and asks OPA whether they meet the configured policies:
 
 ```python
 query_opa(manifest, "swiftdeploy/canary", canary_input)  # canary safety
@@ -216,9 +243,9 @@ Canary Safety Policy: ✘ FAIL
 
 Metrics tell you **what is happening**. Policy tells you **whether that is acceptable** under your rules.
 
-## Chaos engineering
+## 🧪 Chaos engineering
 
-Chaos is part of the control plane, not just a README claim. The app exposes its chaos state as a metric, and `status` maps it:
+The app exposes its chaos state as a metric, which `status` displays:
 
 The `POST /chaos` control endpoint is available only in canary mode and requires
 the `X-Chaos-Token` request header. Set `CHAOS_TOKEN` in the environment before
@@ -251,7 +278,7 @@ OPA evaluates canary safety
 Promotion can be blocked
 ```
 
-## `history.jsonl`: the event trail
+## 🧾 `history.jsonl`: the event trail
 
 SwiftDeploy calls `append_history(...)` throughout the program. The file is [JSON Lines](https://jsonlines.org/): each line is an independent JSON event.
 
@@ -273,7 +300,7 @@ Example:
 {"timestamp":"...","event":"status_scrape","req_s":4.2}
 ```
 
-## `audit`: operational history as a report
+## 🧾 `audit`: operational history as a report
 
 ```bash
 ./swiftdeploy audit
@@ -297,14 +324,87 @@ audit
 audit_report.md
 ```
 
-## Quick start
+## 🚀 Getting started
+
+### Requirements
+
+- Python 3.11 (the version used by CI) for the CLI and tests
+- Docker Engine with the Docker Compose plugin
+
+The app runs in a Python container. The local CLI uses PyYAML, Jinja2, and psutil.
+
+### Build and deploy
+
+From the repository root:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install pyyaml jinja2 psutil
+
+docker build -t swiftdeploy:latest .
 ./swiftdeploy init
-./swiftdeploy validate
+docker compose config --quiet
 ./swiftdeploy deploy
-./swiftdeploy status
-./swiftdeploy promote stable
-./swiftdeploy audit
-./swiftdeploy teardown
 ```
+
+The default manifest deploys the app in canary mode. Once deployment is healthy,
+the service is available at `http://localhost:5050`. Useful endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/healthz` | Service health and deployment metadata |
+| `/metrics` | Prometheus-format metrics |
+| `POST /chaos` | Authenticated chaos controls; canary mode only |
+
+### Protect and use chaos controls
+
+The chaos endpoint is disabled unless `CHAOS_TOKEN` is set. Export a private
+token before deploying if you want to use it:
+
+```bash
+export CHAOS_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+./swiftdeploy deploy
+```
+
+Send the token in the `X-Chaos-Token` header to activate a test scenario or
+recover the service:
+
+```bash
+curl -X POST http://localhost:5050/chaos \
+  -H "X-Chaos-Token: $CHAOS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"error","rate":0.5}'
+
+curl -X POST http://localhost:5050/chaos \
+  -H "X-Chaos-Token: $CHAOS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"recover"}'
+```
+
+### Run tests
+
+```bash
+python -m pip install -r app/requirements-test.txt
+python -m pytest tests/
+```
+
+The test requirements include the app's runtime requirements, plus pytest and
+httpx. The Docker image installs only `app/requirements.txt`.
+
+## ⚙️ CI workflow
+
+The GitHub Actions workflow runs Python linting and tests, checks and tests the
+OPA policies, generates the deployment configuration, validates it with
+`docker compose config`, then deploys the container stack and checks its health.
+CI requires OPA to be available for the pre-deployment policy gate.
+
+Set `SWIFTDEPLOY_REQUIRE_OPA=1` locally to make the CLI fail if OPA is
+unavailable. By default, an unavailable OPA service produces a warning and the
+CLI continues, which is useful during local development.
+
+## 🧹 Tear down
+
+Use `./swiftdeploy teardown` to stop and remove the stack and its volumes. Add
+`--clean` to also remove generated configuration files.
