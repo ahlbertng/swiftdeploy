@@ -86,6 +86,7 @@ jobs:
         run: |
           docker build -t swiftdeploy:latest .
           ./swiftdeploy init
+          docker compose config --quiet
           docker compose up -d opa
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://localhost:8182/health?plugins >/dev/null; then
