@@ -97,6 +97,10 @@ wait for /healthz
 record deployment
 ```
 
+Set `SWIFTDEPLOY_REQUIRE_OPA=1` to make policy gates fail when OPA is
+unavailable instead of warning and continuing. It is enabled in CI; leaving it
+unset preserves the default local-development behavior.
+
 ### `./swiftdeploy promote stable`
 
 When currently on canary:
