@@ -85,7 +85,19 @@ jobs:
       - name: Build and Deploy Docker Compose Stack
         run: |
           docker build -t swiftdeploy:latest .
-          ./swiftdeploy deploy
+          ./swiftdeploy init
+          docker compose up -d opa
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8182/health?plugins >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          if ! curl --fail --silent http://localhost:8182/health?plugins >/dev/null; then
+            docker compose logs opa
+            exit 1
+          fi
+          SWIFTDEPLOY_REQUIRE_OPA=1 ./swiftdeploy deploy
 
       # 11. Integration Test: Check Health Status Endpoint
       - name: Verify Live Application Healthz

@@ -242,6 +242,11 @@ def calc_error_rate_and_p99(metrics: dict):
 
 # Pre-flight OPA gates 
 
+def opa_required():
+    return os.getenv("SWIFTDEPLOY_REQUIRE_OPA", "").strip().lower() in {
+        "1", "true", "yes"
+    }
+
 def gate_pre_deploy(manifest):
     """Query infra policy before deploy. Exit if blocked."""
     header("Policy Check: Pre-Deploy (Infrastructure)")
@@ -251,10 +256,11 @@ def gate_pre_deploy(manifest):
     allowed, violations, error = query_opa(manifest, "swiftdeploy/infra", stats)
 
     if error:
-        # OPA unavailable — distinct failure mode, warn but don't crash
-
-        warn(f"OPA unavailable ({error}) — skipping policy gate")
         append_history({"event": "opa_unavailable", "gate": "pre_deploy", "reason": error})
+        if opa_required():
+            fail(f"OPA unavailable ({error}) — required policy gate cannot be skipped")
+            sys.exit(1)
+        warn(f"OPA unavailable ({error}) — skipping policy gate")
         return
 
     append_history({
@@ -295,8 +301,11 @@ def gate_pre_promote(manifest, nginx_port, app_port):
     allowed, violations, error = query_opa(manifest, "swiftdeploy/canary", input_data)
 
     if error:
-        warn(f"OPA unavailable ({error}) — skipping policy gate")
         append_history({"event": "opa_unavailable", "gate": "pre_promote", "reason": error})
+        if opa_required():
+            fail(f"OPA unavailable ({error}) — required policy gate cannot be skipped")
+            sys.exit(1)
+        warn(f"OPA unavailable ({error}) — skipping policy gate")
         return
 
     append_history({
